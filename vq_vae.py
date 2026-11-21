@@ -140,6 +140,26 @@ class ConvBlock(nn.Module):
 
         return x
 
+class DeconvBlock(nn.Module):
+    def __init__(self, 
+                 in_channels: int = 32,
+                 out_channels: int = 64,
+                 stride: int = 1,
+                 n_repeats: int = 3,
+                 interpolate: bool = True
+                 ) -> None:
+        super().__init__()
+        self.interpolate = interpolate
+        self.conv = ConvBlock(in_channels,
+                              out_channels,
+                              stride,
+                              n_repeats)
+
+    def forward(self, x):
+        if self.interpolate:
+            x = F.interpolate(x, scale_factor=2)
+        return self.conv(x)
+
 class Encoder(nn.Module):
     def __init__(self, channels: List[int] = [32, 64, 128],
                  n_repeats: List[int] = [3, 3, 4],
@@ -163,7 +183,8 @@ class Encoder(nn.Module):
         self.conv2 = ConvBlock(in_channels=channels[1],
                                out_channels=channels[2],
                                stride=2,
-                               n_repeats=n_repeats[1])
+                               n_repeats=n_repeats[1]
+                               )
 
         self.conv3 = ConvBlock(in_channels=channels[2],
                                out_channels=embedding_dim,
@@ -180,12 +201,43 @@ class Encoder(nn.Module):
         return x
 
 class Decoder(nn.Module):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        pass
+    def __init__(self, channels: List[int] = [128, 64, 32],
+                 n_repeats: List[int] = [3, 3, 4],
+                 embedding_dim: int = 10
+                 ) -> None:
+        super().__init__()
 
-    def forward(self, x):
-        pass
+        self.layer1 = nn.Sequential(nn.Conv2d(in_channels=embedding_dim,
+                                out_channels=channels[0],
+                                stride=1,
+                                kernel_size=3,
+                                padding=1),
+                                    nn.BatchNorm2d(channels[0]),
+                                    nn.LeakyReLU()
+                                )
+        self.conv1 = DeconvBlock(in_channels=channels[0],
+                               out_channels=channels[1],
+                               stride=1,
+                               n_repeats=n_repeats[0])
+
+        self.conv2 = DeconvBlock(in_channels=channels[1],
+                               out_channels=channels[2],
+                               stride=1,
+                               n_repeats=n_repeats[1],
+                            )
+
+        self.conv3 = DeconvBlock(in_channels=channels[2],
+                               out_channels=3,
+                               stride=1,
+                               n_repeats=n_repeats[2], interpolate=False)
+
+    def forward(self, q):
+        # q shape: (B, 10, 8, 8)
+        x = self.layer1(q) # (B, 10, 8, 8) => (B, 128, 8, 8)
+        x = self.conv1(x) # (B, 128, 8, 8) => (B, 64, 16, 16)
+        x = self.conv2(x) # (B, 64, 16, 16) => (B, 32, 32, 32)
+        x = self.conv3(x) # (B, 32, 32, 32) => (B, 3, 32, 32)
+        return x
 
 class VQVAE(nn.Module):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -204,10 +256,13 @@ class VQVAE(nn.Module):
 if __name__ == "__main__":
     vq = VectorQuantizer(32, 10, 0.25)
     enc = Encoder()
+    dec = Decoder()
     print(sum([p.numel() for p in enc.parameters()]))
+    print(sum([p.numel() for p in dec.parameters()]))
 
     x = torch.randn(8, 3, 32, 32)
     out = enc(x)
+    x2 = dec(out)
     loss, q, perp = vq(out)
-    print(loss, perp, q.shape, x.shape, out.shape)
+    print(loss, perp, q.shape, x.shape, out.shape, x2.shape)
 
