@@ -66,6 +66,36 @@ class VectorQuantizer(nn.Module):
         perplexity = torch.exp(-torch.sum(nonzero_probs * torch.log(nonzero_probs + 1e-8)))
         return loss, q, perplexity
 
+class Encoder(nn.Module):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        pass
+
+    def forward(self, x):
+        pass
+
+class Decoder(nn.Module):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        pass
+
+    def forward(self, x):
+        pass
+
+class VQVAE(nn.Module):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        pass
+
+    def forward(self, x):
+        pass
+
+    def encode(self, x):
+        pass
+
+    def decode(self, q):
+        pass
+
 if __name__ == "__main__":
     vq = VectorQuantizer(32, 10, 0.25)
 
