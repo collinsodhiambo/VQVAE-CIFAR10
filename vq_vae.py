@@ -240,29 +240,53 @@ class Decoder(nn.Module):
         return x
 
 class VQVAE(nn.Module):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        pass
+    def __init__(self,
+                 encoder = Encoder,
+                 decoder = Decoder,
+                 vector_q = VectorQuantizer,
+                 channels: List[int] = [128, 64, 32],
+                 n_repeats: List[int] = [3, 3, 4],
+                 embedding_dim: int = 10,
+                 num_embeddings: int = 512,
+                 commitment_cost: float = 0.25
+                 ) -> None:
+        super().__init__()
+        self.encoder = encoder(channels=channels,
+                               n_repeats=n_repeats,
+                               embedding_dim=embedding_dim)
+        self.decoder = decoder(channels=channels,
+                               n_repeats=n_repeats,
+                               embedding_dim=embedding_dim)
+        self.vector_q= vector_q(embedding_dim=embedding_dim, 
+                                num_embeddings=num_embeddings,
+                                commitment_cost=commitment_cost)
 
     def forward(self, x):
-        pass
+        q, loss, perplexity = self.encode(x)
+        x_recon = self.decoder(q)
+        return x_recon, loss, perplexity
 
     def encode(self, x):
-        pass
+        encoder_output = self.encoder(x)
+        loss, q, perplexity = self.vector_q(encoder_output)
+        return q, loss, perplexity
 
     def decode(self, q):
-        pass
+        return self.decoder(q)
 
 if __name__ == "__main__":
     vq = VectorQuantizer(32, 10, 0.25)
     enc = Encoder()
     dec = Decoder()
+    vae = VQVAE()
     print(sum([p.numel() for p in enc.parameters()]))
     print(sum([p.numel() for p in dec.parameters()]))
+    print(sum([p.numel() for p in vae.parameters()]))
 
     x = torch.randn(8, 3, 32, 32)
     out = enc(x)
     x2 = dec(out)
+    x3, loss2, perp2 = vae(x)
     loss, q, perp = vq(out)
-    print(loss, perp, q.shape, x.shape, out.shape, x2.shape)
+    print(loss, perp, q.shape, x.shape, out.shape, x2.shape, x3.shape)
 
