@@ -260,6 +260,14 @@ class VQVAE(nn.Module):
         self.vector_q= vector_q(embedding_dim=embedding_dim, 
                                 num_embeddings=num_embeddings,
                                 commitment_cost=commitment_cost)
+        
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Conv2d):
+            nn.init.kaiming_normal_(m.weight, nonlinearity="leaky_relu")
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
 
     def forward(self, x):
         q, loss, perplexity = self.encode(x)
@@ -289,4 +297,5 @@ if __name__ == "__main__":
     x3, loss2, perp2 = vae(x)
     loss, q, perp = vq(out)
     print(loss, perp, q.shape, x.shape, out.shape, x2.shape, x3.shape)
+
 
