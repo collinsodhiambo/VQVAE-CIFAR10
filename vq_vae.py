@@ -254,22 +254,24 @@ class VQVAE(nn.Module):
                  encoder = Encoder,
                  decoder = Decoder,
                  vector_q = VectorQuantizer,
-                 channels: List[int] = [128, 64, 32],
-                 n_repeats: List[int] = [3, 3, 4],
+                 channels: List[int] = [64, 128, 256],
+                 n_repeats: List[int] = [3, 4, 4],
                  embedding_dim: int = 10,
-                 num_embeddings: int = 512,
-                 commitment_cost: float = 0.25
+                 num_embeddings: int = 256,
                  ) -> None:
         super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim  = embedding_dim
+
         self.encoder = encoder(channels=channels,
                                n_repeats=n_repeats,
                                embedding_dim=embedding_dim)
-        self.decoder = decoder(channels=channels,
+        self.decoder = decoder(channels=channels[::-1],
                                n_repeats=n_repeats,
                                embedding_dim=embedding_dim)
         self.vector_q= vector_q(embedding_dim=embedding_dim, 
                                 num_embeddings=num_embeddings,
-                                commitment_cost=commitment_cost)
+                                )
         
         self.apply(self._init_weights)
 
@@ -280,20 +282,21 @@ class VQVAE(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, x):
-        q, loss, perplexity = self.encode(x)
+        #import code; code.interact(local=locals())
+        q, q_loss, c_loss, perplexity = self.encode(x)
         x_recon = self.decoder(q)
-        return x_recon, loss, perplexity
+        return x_recon, q_loss, c_loss, perplexity
 
     def encode(self, x):
         encoder_output = self.encoder(x)
-        loss, q, perplexity = self.vector_q(encoder_output)
-        return q, loss, perplexity
+        quantization_loss, commitment_loss, q, perplexity = self.vector_q(encoder_output)
+        return q, quantization_loss, commitment_loss, perplexity
 
     def decode(self, q):
         return self.decoder(q)
 
 if __name__ == "__main__":
-    vq = VectorQuantizer(32, 10, 0.25)
+    vq = VectorQuantizer(32, 10)
     enc = Encoder()
     dec = Decoder()
     vae = VQVAE()
@@ -301,11 +304,12 @@ if __name__ == "__main__":
     print(sum([p.numel() for p in dec.parameters()]))
     print(sum([p.numel() for p in vae.parameters()]))
 
-    x = torch.randn(8, 3, 32, 32)
+    x = torch.rand(8, 3, 32, 32)
+    print(x.min(), x.max(), x.mean())
     out = enc(x)
     x2 = dec(out)
-    x3, loss2, perp2 = vae(x)
-    loss, q, perp = vq(out)
-    print(loss, perp, q.shape, x.shape, out.shape, x2.shape, x3.shape)
+    x3, qloss, closs, perp2 = vae(x)
+    qloss, closs, q, perp = vq(out)
+    print(qloss, perp, q.shape, x.shape, out.shape, x2.shape, x3.shape)
 
 
