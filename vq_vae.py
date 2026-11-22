@@ -8,17 +8,16 @@ class VectorQuantizer(nn.Module):
     def __init__(self,
                  num_embeddings: int,
                  embedding_dim: int,
-                 commitment_cost: float) -> None:
+                 ) -> None:
         super().__init__()
 
         self.num_embeddings = num_embeddings
         self.embedding_dim  = embedding_dim
-        self.commitment_cost= commitment_cost
 
         self.embedding = nn.Embedding(self.num_embeddings,
                                       self.embedding_dim
                                       )
-        self.embedding.weight.data.uniform_(-1/self.num_embeddings, 1/self.num_embeddings)
+        self.embedding.weight.data.uniform_(-0.5, 0.5) #(-1/self.num_embeddings, 1/self.num_embeddings)
 
     def forward(self, x: torch.Tensor):
         # Convert inputs for BCHW to BHWC
@@ -84,31 +83,34 @@ class Conv(nn.Module):
                                   kernel_size=1,
                                   )
         self.conv1 = nn.Conv2d(in_channels=in_channels,
-                               out_channels=in_channels * 2,
+                               out_channels=in_channels // 4,
                                kernel_size=1,
                                #padding=1,
                                )
-        self.conv2 = nn.Conv2d(in_channels=2 * in_channels,
-                               out_channels=2 * in_channels,
+        self.bn1   = nn.BatchNorm2d(in_channels // 4)
+        self.conv2 = nn.Conv2d(in_channels=in_channels // 4,
+                               out_channels=in_channels // 4,
                                kernel_size=3,
                                padding=1,
                                stride=stride)
-        self.bn    = nn.BatchNorm2d(2 * in_channels)
+        self.bn2    = nn.BatchNorm2d(in_channels // 4)
 
-        self.conv3 = nn.Conv2d(in_channels=2 * in_channels,
+        self.conv3 = nn.Conv2d(in_channels=in_channels // 4,
                                out_channels=out_channels,
                                kernel_size=1,
                                #padding=1,
                                stride=1)
+        self.bn3  = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         identity = x
-        x = self.conv1(x)
-        x = F.leaky_relu(self.bn(self.conv2(x)))
+        x = F.leaky_relu(self.bn1(self.conv1(x)))
+        x = F.leaky_relu(self.bn2(self.conv2(x)))
         x = self.conv3(x)
 
         identity = identity if self.proj is None else self.proj(identity)
         x = identity + x
+        x = F.leaky_relu(self.bn3(x))
         return x
 
 class ConvBlock(nn.Module):
