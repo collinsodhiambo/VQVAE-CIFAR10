@@ -1,6 +1,6 @@
 import os
 import torch
-from torch import embedding, nn
+from torch import nn
 from tqdm import tqdm
 from vq_vae import VQVAE
 from torch.optim import Adam
