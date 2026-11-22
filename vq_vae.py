@@ -235,6 +235,10 @@ class Decoder(nn.Module):
                                out_channels=3,
                                stride=1,
                                n_repeats=n_repeats[2], interpolate=False)
+        self.conv4 = nn.Conv2d(in_channels=3,
+                               out_channels=3,
+                               kernel_size=3,
+                               padding=1)
 
     def forward(self, q):
         # q shape: (B, 10, 8, 8)
@@ -242,6 +246,7 @@ class Decoder(nn.Module):
         x = self.conv1(x) # (B, 128, 8, 8) => (B, 64, 16, 16)
         x = self.conv2(x) # (B, 64, 16, 16) => (B, 32, 32, 32)
         x = self.conv3(x) # (B, 32, 32, 32) => (B, 3, 32, 32)
+        x = self.conv4(x)
         return F.sigmoid(x)
 
 class VQVAE(nn.Module):
