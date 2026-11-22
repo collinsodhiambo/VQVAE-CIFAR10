@@ -95,6 +95,57 @@ def log_vae_visualizations(model: VQVAE,
                )
     model.train()
 
+@torch.no_grad()
+def inspect_codebook_usage(model, val_images: torch.Tensor, device: str = "cuda"):
+    model.eval()
+    val_images = val_images.to(device)
+
+# 1. Encode to continuous latent map: (B, D, H, W)
+    z_e = model.encoder(val_images)
+
+# 2. Match VectorQuantizer layout: (B, H, W, D) -> (B*H*W, D)[cite: 11]
+    z_e_bhwc = z_e.permute(0, 2, 3, 1).contiguous()
+    B, H, W, D = z_e_bhwc.shape
+    z_flat = z_e_bhwc.view(-1, D)
+
+# 3. Compute L2 distances to codebook weights: (K, D)[cite: 11]
+    emb_weight = model.vector_q.embedding.weight
+    distances = (
+      torch.sum(z_flat.square(), dim=1, keepdim=True)
+      + torch.sum(emb_weight.square(), dim=1)
+      - 2.0 * (z_flat @ emb_weight.t())
+    )
+
+# 4. Discrete indices: flat (B*H*W,) and spatial grid (B, H, W)[cite: 11]
+    indices_flat = torch.argmin(distances, dim=1)
+    indices_grid = indices_flat.view(B, H, W)
+
+# 5. Per-code counts across all spatial tokens in the batch[cite: 11]
+    num_embeddings = model.num_embeddings
+    counts = torch.bincount(indices_flat, minlength=num_embeddings)
+
+    active_codes = (counts > 0).sum().item()
+    dead_codes = num_embeddings - active_codes
+    total_tokens = indices_flat.numel()
+
+    probs = counts.float() / counts.sum().clamp_min(1)
+    nonzero_probs = probs[probs > 0]
+    perplexity = torch.exp(
+      -torch.sum(nonzero_probs * torch.log(nonzero_probs + 1e-8))
+    ).item()
+
+    top_counts, top_ids = torch.topk(counts, k=min(10, num_embeddings))
+
+    print(f"Total spatial tokens inspected: {total_tokens} ({B}x{H}x{W})")
+    print(f"Active codes (count > 0): {active_codes} / {num_embeddings}")
+    print(f"Unused/dead codes (count == 0): {dead_codes} / {num_embeddings}")
+    print(f"Perplexity: {perplexity:.2f}")
+    print("Top 10 (code_id: count):", list(zip(top_ids.tolist(), top_counts.tolist())))
+
+    model.train()
+    return indices_grid, counts
+
+
 def train(lr              : float=3e-4,
           epochs          : int  = 1,
           batch_size      : int  = 64,
@@ -185,12 +236,20 @@ def train(lr              : float=3e-4,
     print("Starting training run...")
     BEST_LOSS = float("inf")
 
-    # grab a fixed batch of data for validation before training starts
-    val_batch = next(iter(data_loader))
     if resume_training:
         if master_process:
             print("[INFO]: Resuming training from previous checkpoint.")
         model = load_model(raw_model, checkpoint_path)
+
+    # grab a fixed batch of data for validation before training starts
+    val_batch = next(iter(data_loader))
+    for i in range(5):
+        indices_grid, counts = inspect_codebook_usage(
+        raw_model, val_batch[0], device=device
+        )
+        print(indices_grid.shape, counts.shape, counts.sum().item())
+        val_batch = next(iter(data_loader))
+
 
     rec_loss   = []
     q_losses   = []
