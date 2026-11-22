@@ -52,9 +52,12 @@ class VectorQuantizer(nn.Module):
         # Loss calculation
         # Loss = log P(x|z_{q}(x)) + ||z_{e}(x).detach() - e|| + Beta * ||z_{e}(x) - e.detach()||
         # where || = MSE
-        commitment_loss = F.mse_loss(x, q.detach())
-        quantization_loss = F.mse_loss(x.detach(), q)
-        loss = quantization_loss + self.commitment_cost * commitment_loss
+        commitment_loss = F.mse_loss(x, q.detach(),
+                                     reduction='none').sum(dim=[1, 2, 3]).mean()
+        quantization_loss = F.mse_loss(x.detach(), q,
+                                       reduction='none').sum(dim=[1, 2, 3]).mean()
+
+        #import code; code.interact(local=locals())
 
         q = x + (q - x).detach() # Straight through estimator
         q = q.permute(0, 3, 1, 2).contiguous()
@@ -65,7 +68,7 @@ class VectorQuantizer(nn.Module):
         # Only sum over nonzero probs
         nonzero_probs = avg_probs[avg_probs > 0]
         perplexity = torch.exp(-torch.sum(nonzero_probs * torch.log(nonzero_probs + 1e-8)))
-        return loss, q, perplexity
+        return quantization_loss, commitment_loss, q, perplexity
 
 class Conv(nn.Module):
     def __init__(self,
