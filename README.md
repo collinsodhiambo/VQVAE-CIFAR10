@@ -73,6 +73,12 @@ x = torch.rand(4, 3, 32, 32, device=device)
 with torch.no_grad():
     x_hat, q_loss, c_loss, perplexity = model(x)
 ```
+### 4: Lessons Learned
+- In the encoder model, not using Batch Normalization layers produced outputs with very large values. This caused the commitment and quantization loss to overshoot to ~50000 in the first epoch! Using batch norm stabilized the training and reduced the losses to ~300
+- Furthermore, we also initialize the embedding weights to be near the encoder outputs so as to stabilize the commitment and quantization losses, further reducing it to ~200 range.
+- Mixture of MSE loss and L1 loss produce images with sharper edges, as compared to MSE alone.
+- I did not see a uniform codebook usage. Final training epoch had a perplexity of around 92, meaning the model only used 92 of the 256 num_embedding vectors comfortably. Perplexity is not a target to be hit, after all, CIFAR10 dataset has limited visual variety at 8x8 patches.
+- Comparison with Variational AutoEncoder (standard) to be done.
 
 ## Citation
 
