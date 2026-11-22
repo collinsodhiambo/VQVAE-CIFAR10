@@ -237,7 +237,7 @@ class Decoder(nn.Module):
         x = self.conv1(x) # (B, 128, 8, 8) => (B, 64, 16, 16)
         x = self.conv2(x) # (B, 64, 16, 16) => (B, 32, 32, 32)
         x = self.conv3(x) # (B, 32, 32, 32) => (B, 3, 32, 32)
-        return x
+        return F.sigmoid(x)
 
 class VQVAE(nn.Module):
     def __init__(self,
